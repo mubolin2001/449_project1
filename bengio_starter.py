@@ -1,6 +1,6 @@
 import argparse
 import random
-
+import time
 import torch
 import torch.nn as nn
 
@@ -63,13 +63,19 @@ def encode(text,words):
 class bengio(torch.nn.Module):
     def __init__(self, dim=50, window=3, batchsize = 1, vocab_size=33279, activation=torch.tanh):
         super().__init__()
-        
+        self.embed = nn.Embedding(vocab_size, dim)
+        self.hidden = nn.Linear(dim * window, 100)
+        self.output = nn.Linear(100, vocab_size)
+        self.activation = activation
         # specify weights, activation functions and any 'helper' function needed for the neural net
 
     def forward(self, x):
         # perform a forward pass (inference) on a batch of concatenated word embeddings
         # hint: it may be more efficiwnt to pass a matrix of indices for the context, and
         # perform a look-up and concatenation of the word embeddings on the GPU.
+        x = self.embed(x).view(x.shape[0], -1)
+        x = self.activation(self.hidden(x))
+        x = self.output(x)
         return x
 
 def train(model,opt):
@@ -83,14 +89,51 @@ def train(model,opt):
     # you model after every epoch.
     #
     # inputs to your neural network can be either word embeddings or word look-up indices
-
+    model.train()
+    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
+    loss_fn = nn.CrossEntropyLoss()
+    start_time = time.time()
+    
+    for epoch in range(opt.epochs):
+        total_loss = 0
+        num_batches = len(opt.train) - opt.window
+        
+        for i in range(0, num_batches, opt.batchsize):
+            context = torch.tensor(opt.train[i:i + opt.window - 1], dtype=torch.long)
+            target = torch.tensor(opt.train[i + opt.window - 1], dtype=torch.long)
+            
+            optimizer.zero_grad()
+            output = model(context.unsqueeze(0))
+            loss = loss_fn(output, target.unsqueeze(0))
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+        
+        avg_loss = total_loss / num_batches
+        elapsed_time = time.time() - start_time
+        print(f"Epoch {epoch + 1}/{opt.epochs}, Loss: {avg_loss:.4f}, Time: {elapsed_time:.2f}s")
     if opt.savename:
         torch.save(model.state_dict(), opt.savename + '/model_weights')
     return
 
 def test_model(model, opt, epoch):
-    # functionality for this function is similar to train() except that you construct examples for the
-    # test or validation corpus; and you do not appy gradient descent.
+    model.eval()
+    loss_fn = nn.CrossEntropyLoss()
+    total_loss = 0
+    num_batches = len(opt.test) - opt.window
+    
+    with torch.no_grad():
+        for i in range(0, num_batches, opt.batchsize):
+            context = torch.tensor(opt.test[i:i + opt.window - 1], dtype=torch.long)
+            target = torch.tensor(opt.test[i + opt.window - 1], dtype=torch.long)
+            
+            output = model(context.unsqueeze(0))
+            loss = loss_fn(output, target.unsqueeze(0))
+            total_loss += loss.item()
+    
+    avg_loss = total_loss / num_batches
+    print(f"Test Loss after epoch {epoch}: {avg_loss:.4f}")
     return
 
 def main():
