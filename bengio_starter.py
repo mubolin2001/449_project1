@@ -78,12 +78,7 @@ class bengio(torch.nn.Module):
         x = self.output(x)
         return x
 def batchify_data(opt):
-    """
-    Converts opt.train (list of tokenized words) into batches of contexts and targets.
-    Handles sentence boundaries properly.
-    """
-    batch_data = []
-    
+    batch_data = []  
     num_batches = (len(opt.train) - opt.window) // opt.batchsize
 
     for i in range(0, num_batches * opt.batchsize, opt.batchsize):
@@ -138,6 +133,7 @@ def train(model, opt):
         avg_loss = total_loss / num_batches
         elapsed_time = time.time() - start_time
         print(f"Epoch {epoch+1}/{opt.epochs}, Loss: {avg_loss:.4f}, Time: {elapsed_time:.2f}s")
+        torch.save(model.state_dict(), f"model_epoch_{epoch+1}.pth")
 
 def test_model(model, opt, epoch):
     """
